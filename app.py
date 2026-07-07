@@ -2,86 +2,72 @@ import streamlit as st
 import joblib
 import nltk
 import string
+
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 
-# Download required NLTK resources
-nltk.download("stopwords")
-nltk.download("punkt")
-nltk.download("wordnet")
-nltk.download("omw-1.4")
+# ----------------------------
+# Download required NLTK data
+# ----------------------------
+resources = {
+    "punkt": "tokenizers/punkt",
+    "punkt_tab": "tokenizers/punkt_tab",
+    "stopwords": "corpora/stopwords",
+    "wordnet": "corpora/wordnet",
+    "omw-1.4": "corpora/omw-1.4",
+}
 
-# Load model and vectorizer
-@st.cache_resource
-def load_resources():
-    model = joblib.load("logistic_regression_model.joblib")
-    vectorizer = joblib.load("tfidf_vectorizer.joblib")
-    lemmatizer = WordNetLemmatizer()
-    stop_words = set(stopwords.words("english"))
+for resource, path in resources.items():
+    try:
+        nltk.data.find(path)
+    except LookupError:
+        nltk.download(resource)
 
-    return model, vectorizer, lemmatizer, stop_words
+# ----------------------------
+# Load saved model and vectorizer
+# ----------------------------
+model = joblib.load("sentiment_model.pkl")
+vectorizer = joblib.load("tfidf_vectorizer.pkl")
 
-model, tfidf_vectorizer, lemmatizer, stop_words = load_resources()
-
-
+# ----------------------------
 # Text preprocessing function
+# ----------------------------
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words("english"))
+
 def preprocess_text(text):
     # Convert to lowercase
     text = text.lower()
 
-    # Remove punctuation
-    text = text.translate(str.maketrans("", "", string.punctuation))
-
     # Tokenize
     tokens = word_tokenize(text)
 
-    # Remove stopwords and lemmatize
-    cleaned_tokens = [
+    # Remove punctuation and stopwords
+    tokens = [
         lemmatizer.lemmatize(word)
         for word in tokens
-        if word.isalpha() and word not in stop_words
+        if word not in string.punctuation and word not in stop_words
     ]
 
-    return " ".join(cleaned_tokens)
+    return " ".join(tokens)
 
-
-# ---------------- Streamlit UI ----------------
-
-st.set_page_config(
-    page_title="Movie Review Sentiment Analysis",
-    page_icon="🎬"
-)
-
+# ----------------------------
+# Streamlit UI
+# ----------------------------
 st.title("🎬 Movie Review Sentiment Analysis")
-st.write("Enter a movie review and click **Analyze Sentiment**.")
 
-review = st.text_area(
-    "Movie Review",
-    height=200,
-    placeholder="Example: This movie was amazing. I loved the acting!"
-)
+review = st.text_area("Enter your movie review:")
 
-if st.button("Analyze Sentiment"):
-
+if st.button("Predict Sentiment"):
     if review.strip() == "":
-        st.warning("Please enter a movie review.")
+        st.warning("Please enter a review.")
     else:
-        try:
-            # Preprocess
-            cleaned_review = preprocess_text(review)
+        cleaned_review = preprocess_text(review)
+        vectorized_review = vectorizer.transform([cleaned_review])
+        prediction = model.predict(vectorized_review)[0]
 
-            # Vectorize
-            review_vector = tfidf_vectorizer.transform([cleaned_review])
-
-            # Predict
-            prediction = model.predict(review_vector)[0]
-
-            # Display result
-            if prediction == 1:
-                st.success("😊 Positive Sentiment")
-            else:
-                st.error("😠 Negative Sentiment")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
+        if prediction == 1:
+            st.success("😊 Positive Review")
+        else:
+            st.error("😞 Negative Review")
